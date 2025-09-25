@@ -126,8 +126,16 @@ class MainWindow(QMainWindow):
             self.info_table.setRowCount(0)
             return
 
-        # Popis + URL
-        desc = f"{data['name']}\n\n{data['description']}\n\n🔗 {data['url']}"
+        # Popis + URL + Input/Output
+        inputs = ", ".join(data.get("input", []))
+        outputs = ", ".join(data.get("output", []))
+        desc = (
+            f"{data['name']}\n\n"
+            f"{data['description']}\n\n"
+            f"🔗 {data['url']}\n\n"
+            f"Input: {inputs}\n"
+            f"Output: {outputs}"
+        )
         self.info_description.setPlainText(desc)
 
         # Parametry
