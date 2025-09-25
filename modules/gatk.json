@@ -1,0 +1,19 @@
+{
+  "name": "GATK",
+  "description": "Toolkit pro variant calling a genomickou analýzu.",
+  "url": "https://gatk.broadinstitute.org/",
+  "input": ["BAM", "Reference FASTA"],
+  "output": ["VCF"],
+  "parameters": {
+    "tool": {
+      "type": "string",
+      "default": "HaplotypeCaller",
+      "description": "Nástroj v rámci GATK (např. HaplotypeCaller, Mutect2)."
+    },
+    "stand_call_conf": {
+      "type": "float",
+      "default": 30.0,
+      "description": "Práh pro volání variant."
+    }
+  }
+}

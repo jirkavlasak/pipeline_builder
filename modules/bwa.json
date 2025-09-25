@@ -1,0 +1,19 @@
+{
+  "name": "BWA",
+  "description": "Mapování čtení na referenční genom.",
+  "url": "http://bio-bwa.sourceforge.net/",
+  "input": ["FASTQ", "Reference FASTA"],
+  "output": ["SAM/BAM"],
+  "parameters": {
+    "algorithm": {
+      "type": "string",
+      "default": "mem",
+      "description": "Použitý algoritmus (aln, samse, sampe, mem)."
+    },
+    "threads": {
+      "type": "int",
+      "default": 8,
+      "description": "Počet vláken."
+    }
+  }
+}

@@ -1,23 +1,34 @@
 import sys
+import os
+import json
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QPushButton, QVBoxLayout,
-    QHBoxLayout, QWidget, QListWidget, QTextEdit, QLabel, QMenuBar, QMenu
+    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
+    QListWidget, QTextEdit, QLabel, QMenuBar, QTableWidget,
+    QTableWidgetItem, QHeaderView, QPushButton,QScrollArea, QFrame
 )
+
+
+def load_modules():
+    """Načte všechny JSON moduly ze složky modules/"""
+    module_info = {}
+    if not os.path.exists("modules"):
+        os.makedirs("modules")
+    for file in os.listdir("modules"):
+        if file.endswith(".json"):
+            with open(os.path.join("modules", file), "r", encoding="utf-8") as f:
+                data = json.load(f)
+                module_info[data["name"]] = data
+    return module_info
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Pipeline Builder")
-        self.resize(1000, 700)
+        self.resize(1200, 700)
 
-        # ---- Modulová "knihovna" s popisy ----
-        self.module_info = {
-            "FastQC": "Nástroj pro kontrolu kvality sekvenačních dat (FASTQ).",
-            "Trimmomatic": "Ořezává adaptery a nízkou kvalitu z FASTQ souborů.",
-            "BWA": "Mapování DNA čtení na referenční genom.",
-            "GATK": "Toolkit pro variant calling a analýzu genomických dat."
-        }
+        # ---- Načíst moduly ----
+        self.module_info = load_modules()
 
         # ---- Horní menu ----
         menubar = QMenuBar(self)
@@ -42,7 +53,6 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("Dostupné moduly"))
         left_layout.addWidget(self.module_list)
-
         left_panel = QWidget()
         left_panel.setLayout(left_layout)
 
@@ -55,17 +65,28 @@ class MainWindow(QMainWindow):
         self.btn_generate = QPushButton("Vygenerovat pipeline")
         self.btn_generate.clicked.connect(self.generate_pipeline)
         right_layout.addWidget(self.btn_generate)
-
         right_panel = QWidget()
         right_panel.setLayout(right_layout)
 
-        # ---- Pravý spodní panel: modul info ----
-        self.info_area = QTextEdit()
-        self.info_area.setReadOnly(True)
+        # ---- Pravý spodní panel: module info ----
+        self.info_description = QTextEdit()
+        self.info_description.setReadOnly(True)
+
+        # Kontejner pro parametry
+        self.param_container = QWidget()
+        self.param_layout = QVBoxLayout()
+        self.param_container.setLayout(self.param_layout)
+
+        # Scrollovací oblast (aby se daly parametry posouvat)
+        self.param_scroll = QScrollArea()
+        self.param_scroll.setWidgetResizable(True)
+        self.param_scroll.setWidget(self.param_container)
 
         info_layout = QVBoxLayout()
         info_layout.addWidget(QLabel("Module Info"))
-        info_layout.addWidget(self.info_area)
+        info_layout.addWidget(self.info_description, 2)
+        info_layout.addWidget(QLabel("Parameters"))
+        info_layout.addWidget(self.param_scroll, 3)
 
         info_panel = QWidget()
         info_panel.setLayout(info_layout)
@@ -78,7 +99,7 @@ class MainWindow(QMainWindow):
         main_split = QHBoxLayout()
         main_split.addWidget(left_panel, 2)
         main_split.addWidget(right_panel, 3)
-        main_split.addWidget(info_panel, 3)
+        main_split.addWidget(info_panel, 4)
 
         top_panel = QWidget()
         top_panel.setLayout(main_split)
@@ -95,10 +116,49 @@ class MainWindow(QMainWindow):
     # ---------- Funkce ----------
 
     def show_module_info(self, item):
-        """Zobrazí popis vybraného modulu"""
+        """Zobrazí detail vybraného modulu"""
         name = item.text()
-        description = self.module_info.get(name, "Popis není dostupný.")
-        self.info_area.setPlainText(f"{name}\n\n{description}")
+        data = self.module_info.get(name)
+
+        if not data:
+            self.info_description.setPlainText("Žádné informace o modulu.")
+            self.info_table.clearContents()
+            self.info_table.setRowCount(0)
+            return
+
+        # Popis + URL
+        desc = f"{data['name']}\n\n{data['description']}\n\n🔗 {data['url']}"
+        self.info_description.setPlainText(desc)
+
+        # Parametry
+        for i in reversed(range(self.param_layout.count())):
+            widget = self.param_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+# Přidat nové parametry
+        params = data.get("parameters", {})
+        if params:
+            for pname, pinfo in params.items():
+                # Popis
+                desc_label = QLabel(pinfo.get("description", ""))
+                desc_label.setWordWrap(True)
+                desc_label.setStyleSheet("font-style: italic; color: gray; margin-top:10px;")
+                self.param_layout.addWidget(desc_label)
+
+                # Detail parametru (název, typ, default)
+                detail_text = f"{pname} ({pinfo.get('type', 'str')}, default={pinfo.get('default', 'None')})"
+                detail_label = QLabel(detail_text)
+                detail_label.setStyleSheet("font-weight: bold;")
+                self.param_layout.addWidget(detail_label)
+
+                # Oddělovací čára
+                line = QFrame()
+                line.setFrameShape(QFrame.HLine)
+                line.setFrameShadow(QFrame.Sunken)
+                self.param_layout.addWidget(line)
+        else:
+            self.param_layout.addWidget(QLabel("Žádné parametry."))
 
     def add_module_to_workflow(self, item):
         """Přidá modul do workflow panelu"""

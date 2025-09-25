@@ -1,0 +1,24 @@
+{
+  "name": "Trimmomatic",
+  "description": "Ořezávání adapterů a nízké kvality ze sekvenačních dat.",
+  "url": "http://www.usadellab.org/cms/?page=trimmomatic",
+  "input": ["FASTQ"],
+  "output": ["Trimmed FASTQ"],
+  "parameters": {
+    "phred": {
+      "type": "int",
+      "default": 33,
+      "description": "Kvalitativní skóre (33 nebo 64)."
+    },
+    "slidingwindow": {
+      "type": "string",
+      "default": "4:20",
+      "description": "Ořez podle průměrné kvality (okno:průměr)."
+    },
+    "minlen": {
+      "type": "int",
+      "default": 36,
+      "description": "Minimální délka čtení po ořezu."
+    }
+  }
+}

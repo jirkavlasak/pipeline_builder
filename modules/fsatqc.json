@@ -1,0 +1,19 @@
+{
+  "name": "FastQC",
+  "description": "Kontrola kvality FASTQ dat.",
+  "url": "https://www.bioinformatics.babraham.ac.uk/projects/fastqc/",
+  "input": ["FASTQ"],
+  "output": ["HTML report", "ZIP summary"],
+  "parameters": {
+    "threads": {
+      "type": "int",
+      "default": 4,
+      "description": "Počet vláken pro běh FastQC."
+    },
+    "nogroup": {
+      "type": "bool",
+      "default": false,
+      "description": "Zakáže seskupování sekvencí podle délky."
+    }
+  }
+}
