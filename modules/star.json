@@ -1,0 +1,14 @@
+{
+  "name": "STAR",
+  "description": "Ultrafast universal RNA-seq aligner.",
+  "url": "https://github.com/alexdobin/STAR",
+  "input": ["fastq_file", "genome_dir"],
+  "output": ["bam_file"],
+  "parameters": {
+    "threads": {
+      "type": "int",
+      "default": 4,
+      "description": "Number of threads"
+    }
+  }
+}

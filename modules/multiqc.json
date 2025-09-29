@@ -1,0 +1,8 @@
+{
+  "name": "MultiQC",
+  "description": "Aggregate results from bioinformatics analyses into a single report.",
+  "url": "https://multiqc.info/",
+  "input": ["results_dir"],
+  "output": ["multiqc_report"],
+  "parameters": {}
+}

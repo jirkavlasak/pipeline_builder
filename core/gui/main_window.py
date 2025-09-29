@@ -5,7 +5,8 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
     QListWidget, QTextEdit, QLabel, QMenuBar, QTableWidget,
     QTableWidgetItem, QHeaderView, QPushButton,QScrollArea, QFrame,
-    QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QFileDialog
+    QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QFileDialog,
+    QGroupBox
 )
 from PySide6.QtCore import Qt,QPoint
 from PySide6.QtWidgets import QMenu
@@ -78,6 +79,90 @@ class ParameterDialog(QDialog):
         return values
 
 
+class PipelineSettingsDialog(QDialog):
+    def __init__(self, modules, module_info, workflow_params, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Pipeline Settings")
+        self.resize(600, 600)
+        self.layout = QVBoxLayout(self)
+        self.param_widgets = {}
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        form_layout = QFormLayout(content)  # OPRAVA zde (původně QVBoxLayout)
+
+        # --- General output dir (společný pro všechny moduly) ---
+        self.output_dir_edit = QLineEdit()
+        output_dir_btn = QPushButton("Browse")
+        output_dir_btn.clicked.connect(self.select_output_dir)
+        output_dir_layout = QHBoxLayout()
+        output_dir_layout.addWidget(self.output_dir_edit)
+        output_dir_layout.addWidget(output_dir_btn)
+        form_layout.addRow("General output directory:", output_dir_layout)
+
+        for module_name in modules:
+            params = module_info[module_name].get("parameters", {})
+            inputs = module_info[module_name].get("input", [])
+            group = QGroupBox(module_name)
+            group_layout = QFormLayout(group)
+            widgets = {}
+
+            # Dynamicky pro všechny vstupy
+            for input_name in inputs:
+                input_edit = QLineEdit()
+                input_btn = QPushButton("Browse")
+                input_btn.clicked.connect(lambda _, e=input_edit: self.select_file(e))
+                input_layout = QHBoxLayout()
+                input_layout.addWidget(input_edit)
+                input_layout.addWidget(input_btn)
+                group_layout.addRow(f"{input_name}:", input_layout)
+                widgets[input_name] = input_edit
+
+            # Parametry modulu
+            for pname, pinfo in params.items():
+                edit = QLineEdit(str(pinfo.get("default", "")))
+                group_layout.addRow(f"{pname}:", edit)
+                widgets[pname] = edit
+
+            # Předvyplnit předchozí hodnoty
+            if module_name in workflow_params:
+                for pname, edit in widgets.items():
+                    if pname in workflow_params[module_name]:
+                        edit.setText(workflow_params[module_name][pname])
+
+            group.setLayout(group_layout)
+            form_layout.addWidget(group)
+            self.param_widgets[module_name] = widgets
+
+        content.setLayout(form_layout)
+        scroll.setWidget(content)
+        self.layout.addWidget(scroll)
+
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        self.layout.addWidget(self.button_box)
+
+    def select_file(self, line_edit):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Input File")
+        if file_path:
+            line_edit.setText(file_path)
+
+    def select_output_dir(self):
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if dir_path:
+            self.output_dir_edit.setText(dir_path)
+
+    def get_all_values(self):
+        result = {}
+        for module_name, widgets in self.param_widgets.items():
+            result[module_name] = {pname: edit.text() for pname, edit in widgets.items()}
+        # Přidejte společný výstupní adresář
+        result["_general_output_dir"] = self.output_dir_edit.text()
+        return result
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -86,6 +171,7 @@ class MainWindow(QMainWindow):
 
         # ---- Načíst moduly ----
         self.module_info = load_modules()
+        self.workflow_params = {}  # inicializace zde
 
         # ---- Horní menu ----
         menubar = QMenuBar(self)
@@ -117,16 +203,23 @@ class MainWindow(QMainWindow):
         self.workflow_area = QListWidget()
         from PySide6.QtCore import Qt, QPoint
         from PySide6.QtWidgets import QMenu
-        # ...existing code...        self.workflow_area.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.workflow_area.setContextMenuPolicy(Qt.CustomContextMenu)
         self.workflow_area.customContextMenuRequested.connect(self.show_workflow_context_menu)
         self.workflow_area.keyPressEvent = self.workflow_key_press_event  # Přidá podporu pro Delete
         right_layout = QVBoxLayout()
         right_layout.addWidget(QLabel("Workflow"))
         right_layout.addWidget(self.workflow_area)
 
+        # --- Pipeline Settings a Create Pipeline tlačítka ---
+        pipeline_btns_layout = QHBoxLayout()
+        self.btn_settings = QPushButton("Pipeline Settings")
+        self.btn_settings.clicked.connect(self.open_pipeline_settings)
         self.btn_generate = QPushButton("Create Pipeline")
         self.btn_generate.clicked.connect(self.generate_pipeline)
-        right_layout.addWidget(self.btn_generate)
+        pipeline_btns_layout.addWidget(self.btn_settings)
+        pipeline_btns_layout.addWidget(self.btn_generate)
+        right_layout.addLayout(pipeline_btns_layout)
+
         right_panel = QWidget()
         right_panel.setLayout(right_layout)
 
@@ -168,6 +261,26 @@ class MainWindow(QMainWindow):
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(top_panel, 5)
+
+        # --- Tlačítka pro pipeline ---
+        pipeline_btn_layout = QHBoxLayout()
+        self.btn_run = QPushButton("Run pipeline")
+        self.btn_run.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.btn_run.clicked.connect(self.run_pipeline)
+
+        self.btn_pause = QPushButton("Pause pipeline")
+        self.btn_pause.setStyleSheet("background-color: #FFD700; color: black; font-weight: bold;")
+        self.btn_pause.clicked.connect(self.pause_pipeline)
+
+        self.btn_end = QPushButton("End pipeline")
+        self.btn_end.setStyleSheet("background-color: #F44336; color: white; font-weight: bold;")
+        self.btn_end.clicked.connect(self.end_pipeline)
+
+        pipeline_btn_layout.addWidget(self.btn_run)
+        pipeline_btn_layout.addWidget(self.btn_pause)
+        pipeline_btn_layout.addWidget(self.btn_end)
+        main_layout.addLayout(pipeline_btn_layout)
+
         main_layout.addWidget(QLabel("Log"))
         main_layout.addWidget(self.log_area, 2)
 
@@ -253,20 +366,26 @@ class MainWindow(QMainWindow):
             self.param_layout.addWidget(QLabel("No parameters."))
 
     def add_module_to_workflow(self, item):
-        """Přidá modul do workflow panelu a otevře dialog pro parametry"""
+        """Přidá modul do workflow panelu BEZ dialogu pro parametry"""
         module_name = item.text()
-        params = self.module_info[module_name].get("parameters", {})
-        dialog = ParameterDialog(module_name, params, self)
+        if self.workflow_area.findItems(module_name, Qt.MatchExactly):
+            self.log(f"Module {module_name} is already in workflow.")
+            return
+        self.workflow_area.addItem(module_name)
+        self.log(f"Module {module_name} was added to workflow.")
+
+    def open_pipeline_settings(self):
+        """Otevře dialog pro nastavení parametrů všech modulů ve workflow"""
+        modules = [self.workflow_area.item(i).text() for i in range(self.workflow_area.count())]
+        if not modules:
+            self.log("Workflow is empty.")
+            return
+        dialog = PipelineSettingsDialog(modules, self.module_info, self.workflow_params, self)
         if dialog.exec():
-            param_values = dialog.get_values()
-            # Uložte parametry k modulu (např. do slovníku)
-            if not hasattr(self, "workflow_params"):
-                self.workflow_params = {}
-            self.workflow_params[module_name] = param_values
-            self.workflow_area.addItem(module_name)
-            self.log(f"Module {module_name} was added to workflow with parameters: {param_values}")
-        else:
-            self.log(f"Module {module_name} was not added to workflow")
+            all_param_values = dialog.get_all_values()
+            for module_name, param_values in all_param_values.items():
+                self.workflow_params[module_name] = param_values
+                self.log(f"Parameters for {module_name} set: {param_values}")
 
     def generate_pipeline(self):
         """Zatím jen logovací funkce"""
@@ -276,6 +395,16 @@ class MainWindow(QMainWindow):
     def log(self, message: str):
         """Vypíše zprávu do log panelu"""
         self.log_area.append(message)
+
+    # --- Pipeline tlačítka ---
+    def run_pipeline(self):
+        self.log("Pipeline started.")
+
+    def pause_pipeline(self):
+        self.log("Pipeline paused.")
+
+    def end_pipeline(self):
+        self.log("Pipeline ended.")
 
     # ---- Menu funkce ----
     def new_project(self):
