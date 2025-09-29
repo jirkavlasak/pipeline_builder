@@ -387,10 +387,92 @@ class MainWindow(QMainWindow):
                 self.workflow_params[module_name] = param_values
                 self.log(f"Parameters for {module_name} set: {param_values}")
 
+            # --- Shrnutí Docker image ---
+            docker_images = []
+            missing = []
+            for module_name in modules:
+                # Hledat docker image pod oběma klíči
+                docker_image = (
+                    self.module_info[module_name].get("docker_image")
+                    or self.module_info[module_name].get("container")
+                )
+                if docker_image:
+                    docker_images.append(f"{module_name}: {docker_image}")
+                else:
+                    missing.append(module_name)
+            summary = "Docker images required for this pipeline:\n"
+            summary += "\n".join(docker_images) if docker_images else "None"
+            if missing:
+                summary += "\n\nWARNING: These modules have no Docker image specified:\n"
+                summary += "\n".join(missing)
+
+            # Zobrazit v samostatném okně
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Docker Environment Summary", summary)
+
     def generate_pipeline(self):
         """Zatím jen logovací funkce"""
         modules = [self.workflow_area.item(i).text() for i in range(self.workflow_area.count())]
         self.log(f"Pipeline will contain: {', '.join(modules)}")
+
+        modules = [self.workflow_area.item(i).text() for i in range(self.workflow_area.count())]
+        if not modules:
+            self.log("Workflow is empty.")
+            return
+
+        script_lines = ["#!/usr/bin/env nextflow", "", "nextflow.enable.dsl=2", ""]
+
+        for module_name in modules:
+            data = self.module_info[module_name]
+            params = self.workflow_params.get(module_name, {})
+            container = data.get("container", "")
+            command_template = data.get("command", "")
+
+            # Nahradit placeholdery {param} hodnotami z params
+            command = command_template
+            for pname, pval in params.items():
+                command = command.replace(f"{{{pname}}}", pval)
+
+            # --- Vytvořit proces ---
+            script_lines.append(f"process {module_name.upper()} {{")
+            if container:
+                script_lines.append(f"    container '{container}'")
+            script_lines.append("    input:")
+            for inp in data.get("input", []):
+                script_lines.append(f"        path {inp.replace('.', '_')}")
+            script_lines.append("    output:")
+            for outp in data.get("output", []):
+                script_lines.append(f"        path \"{outp}\"")
+            script_lines.append("    script:")
+            script_lines.append("    \"\"\"")
+            script_lines.append(f"    {command}")
+            script_lines.append("    \"\"\"")
+            script_lines.append("}\n")
+
+        # Workflow blok – zatím jen spustí procesy sekvenčně
+        script_lines.append("workflow {")
+        prev_output = None
+        for module_name in modules:
+            inputs = self.module_info[module_name].get("input", [])
+            if not prev_output:  # první modul dostane data z Channel
+                script_lines.append(f"    data_ch = Channel.fromPath('data/*')")
+                script_lines.append(f"    {module_name.lower()} = {module_name.upper()}(data_ch)")
+                prev_output = module_name.lower()
+            else:
+                script_lines.append(f"    {module_name.lower()} = {module_name.upper()}({prev_output})")
+                prev_output = module_name.lower()
+        script_lines.append("}")
+
+        # Uložit soubor
+        output_dir = "workflows"
+        os.makedirs(output_dir, exist_ok=True)
+        nf_path = os.path.join(output_dir, "main.nf")
+        with open(nf_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(script_lines))
+
+        self.log(f"Pipeline script generated at {nf_path}")
+
+
 
     def log(self, message: str):
         """Vypíše zprávu do log panelu"""

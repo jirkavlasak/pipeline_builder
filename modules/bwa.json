@@ -1,19 +1,15 @@
 {
-  "name": "BWA",
-  "description": "Mapování čtení na referenční genom.",
+  "name": "BWA MEM",
+  "description": "Align reads using BWA MEM.",
   "url": "http://bio-bwa.sourceforge.net/",
-  "input": ["FASTQ", "Reference FASTA"],
-  "output": ["SAM/BAM"],
+  "input": ["reference.fasta", "reads.fastq.gz"],
+  "output": ["aligned.sam"],
+  "container": "quay.io/biocontainers/bwa:0.7.17--hed695b0_7",
   "parameters": {
-    "algorithm": {
-      "type": "string",
-      "default": "mem",
-      "description": "Použitý algoritmus (aln, samse, sampe, mem)."
-    },
-    "threads": {
-      "type": "int",
-      "default": 8,
-      "description": "Počet vláken."
+    "-t": {
+      "description": "Number of threads.",
+      "default": "4"
     }
-  }
+  },
+  "command": "bwa mem -t {-t} {reference.fasta} {reads.fastq.gz} > {aligned.sam}"
 }

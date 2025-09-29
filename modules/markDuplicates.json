@@ -1,0 +1,10 @@
+{
+  "name": "Picard MarkDuplicates",
+  "description": "Mark duplicate reads in BAM files.",
+  "url": "https://broadinstitute.github.io/picard/",
+  "input": ["input.bam"],
+  "output": ["dedup.bam", "metrics.txt"],
+  "container": "quay.io/biocontainers/picard:2.27.4--hdfd78af_0",
+  "parameters": {},
+  "command": "picard MarkDuplicates I={input.bam} O={dedup.bam} M={metrics.txt} REMOVE_DUPLICATES=true"
+}

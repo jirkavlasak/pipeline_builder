@@ -1,0 +1,15 @@
+{
+  "name": "FastQC",
+  "description": "Quality control for high throughput sequence data.",
+  "url": "https://www.bioinformatics.babraham.ac.uk/projects/fastqc/",
+  "input": ["*.fastq.gz"],
+  "output": ["*_fastqc.html", "*_fastqc.zip"],
+  "container": "quay.io/biocontainers/fastqc:0.11.9--0",
+  "parameters": {
+    "--threads": {
+      "description": "Number of threads.",
+      "default": "2"
+    }
+  },
+  "command": "fastqc --threads {--threads} {input} --outdir ."
+}

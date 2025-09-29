@@ -1,19 +1,15 @@
 {
-  "name": "GATK",
-  "description": "Toolkit pro variant calling a genomickou analýzu.",
+  "name": "GATK HaplotypeCaller",
+  "description": "Variant calling with GATK HaplotypeCaller.",
   "url": "https://gatk.broadinstitute.org/",
-  "input": ["BAM", "Reference FASTA"],
-  "output": ["VCF"],
+  "input": ["input.bam", "reference.fasta"],
+  "output": ["output.vcf"],
+  "container": "quay.io/biocontainers/gatk4:4.4.0.0--py36hdfd78af_0",
   "parameters": {
-    "tool": {
-      "type": "string",
-      "default": "HaplotypeCaller",
-      "description": "Nástroj v rámci GATK (např. HaplotypeCaller, Mutect2)."
-    },
-    "stand_call_conf": {
-      "type": "float",
-      "default": 30.0,
-      "description": "Práh pro volání variant."
+    "--stand-call-conf": {
+      "description": "Minimum phred-scaled confidence threshold for calling variants.",
+      "default": "30"
     }
-  }
+  },
+  "command": "gatk HaplotypeCaller -R {reference.fasta} -I {input.bam} -O {output.vcf} --stand-call-conf {--stand-call-conf}"
 }

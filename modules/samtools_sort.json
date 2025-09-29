@@ -1,0 +1,10 @@
+{
+  "name": "Samtools Sort",
+  "description": "Sort BAM/SAM files using Samtools.",
+  "url": "http://www.htslib.org/",
+  "input": ["input.sam"],
+  "output": ["sorted.bam"],
+  "container": "quay.io/biocontainers/samtools:1.17--h00cdaf9_1",
+  "parameters": {},
+  "command": "samtools sort {input.sam} -o {sorted.bam}"
+}

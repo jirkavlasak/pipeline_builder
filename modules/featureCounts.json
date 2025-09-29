@@ -1,0 +1,15 @@
+{
+  "name": "FeatureCounts",
+  "description": "Count reads to genomic features.",
+  "url": "http://bioinf.wehi.edu.au/featureCounts/",
+  "input": ["aligned.bam", "annotation.gtf"],
+  "output": ["counts.txt"],
+  "container": "quay.io/biocontainers/subread:2.0.1--h9a82719_0",
+  "parameters": {
+    "-T": {
+      "description": "Number of threads.",
+      "default": "4"
+    }
+  },
+  "command": "featureCounts -T {-T} -a {annotation.gtf} -o {counts.txt} {aligned.bam}"
+}

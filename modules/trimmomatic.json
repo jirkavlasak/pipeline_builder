@@ -1,24 +1,19 @@
 {
   "name": "Trimmomatic",
-  "description": "Ořezávání adapterů a nízké kvality ze sekvenačních dat.",
+  "description": "Flexible read trimming tool for Illumina NGS data.",
   "url": "http://www.usadellab.org/cms/?page=trimmomatic",
-  "input": ["FASTQ"],
-  "output": ["Trimmed FASTQ"],
+  "input": ["*.fastq.gz"],
+  "output": ["*_trimmed.fastq.gz"],
+  "container": "quay.io/biocontainers/trimmomatic:0.39--hdfd78af_2",
   "parameters": {
     "phred": {
-      "type": "int",
-      "default": 33,
-      "description": "Kvalitativní skóre (33 nebo 64)."
-    },
-    "slidingwindow": {
-      "type": "string",
-      "default": "4:20",
-      "description": "Ořez podle průměrné kvality (okno:průměr)."
+      "description": "Phred quality encoding.",
+      "default": "33"
     },
     "minlen": {
-      "type": "int",
-      "default": 36,
-      "description": "Minimální délka čtení po ořezu."
+      "description": "Minimum read length.",
+      "default": "36"
     }
-  }
+  },
+  "command": "trimmomatic SE -phred{phred} {input} {output} MINLEN:{minlen}"
 }

@@ -1,14 +1,23 @@
 {
   "name": "STAR",
-  "description": "Ultrafast universal RNA-seq aligner.",
+  "description": "Rychlý RNA-seq aligner proti referenčnímu genomu.",
   "url": "https://github.com/alexdobin/STAR",
-  "input": ["fastq_file", "genome_dir"],
-  "output": ["bam_file"],
+  "input": ["*.fastq.gz", "genome_index/"],
+  "output": ["Aligned.out.sam"],
+  "container": "quay.io/biocontainers/star:2.7.10a--h9ee0642_0",
   "parameters": {
-    "threads": {
-      "type": "int",
-      "default": 4,
-      "description": "Number of threads"
+    "--genomeDir": {
+      "description": "Cesta k adresáři s indexem genomu.",
+      "default": "genome_index/"
+    },
+    "--readFilesIn": {
+      "description": "Seznam vstupních FASTQ souborů.",
+      "default": ""
+    },
+    "--runThreadN": {
+      "description": "Počet vláken pro běh STAR.",
+      "default": "4"
     }
-  }
+  },
+  "command": "STAR --genomeDir {--genomeDir} --readFilesIn {--readFilesIn} --runThreadN {--runThreadN} --outFileNamePrefix Aligned."
 }
