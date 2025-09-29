@@ -411,16 +411,18 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Docker Environment Summary", summary)
 
     def generate_pipeline(self):
-        """Zatím jen logovací funkce"""
-        modules = [self.workflow_area.item(i).text() for i in range(self.workflow_area.count())]
-        self.log(f"Pipeline will contain: {', '.join(modules)}")
-
+        """Generuje validní Nextflow DSL2 skript podle workflow a parametrů z GUI."""
         modules = [self.workflow_area.item(i).text() for i in range(self.workflow_area.count())]
         if not modules:
             self.log("Workflow is empty.")
             return
 
-        script_lines = ["#!/usr/bin/env nextflow", "", "nextflow.enable.dsl=2", ""]
+        script_lines = [
+            "#!/usr/bin/env nextflow",
+            "",
+            "nextflow.enable.dsl=2",
+            ""
+        ]
 
         for module_name in modules:
             data = self.module_info[module_name]
@@ -428,42 +430,48 @@ class MainWindow(QMainWindow):
             container = data.get("container", "")
             command_template = data.get("command", "")
 
-            # Nahradit placeholdery {param} hodnotami z params
+            # nahrazení placeholderů {param} hodnotami z params
             command = command_template
             for pname, pval in params.items():
                 command = command.replace(f"{{{pname}}}", pval)
 
-            # --- Vytvořit proces ---
-            script_lines.append(f"process {module_name.upper()} {{")
+            # validní název procesu (bez mezer)
+            process_name = module_name.upper().replace(" ", "_")
+
+            script_lines.append(f"process {process_name} {{")
             if container:
                 script_lines.append(f"    container '{container}'")
             script_lines.append("    input:")
-            for inp in data.get("input", []):
-                script_lines.append(f"        path {inp.replace('.', '_')}")
+            input_files = params.get("input_files")
+            if input_files:
+                script_lines.append(f"        path '{input_files}'")
             script_lines.append("    output:")
-            for outp in data.get("output", []):
-                script_lines.append(f"        path \"{outp}\"")
+            output_files = params.get("output_files")
+            if output_files:
+                script_lines.append(f"        path '{output_files}'")
             script_lines.append("    script:")
             script_lines.append("    \"\"\"")
             script_lines.append(f"    {command}")
             script_lines.append("    \"\"\"")
             script_lines.append("}\n")
 
-        # Workflow blok – zatím jen spustí procesy sekvenčně
+        # --- Workflow blok ---
         script_lines.append("workflow {")
         prev_output = None
         for module_name in modules:
-            inputs = self.module_info[module_name].get("input", [])
-            if not prev_output:  # první modul dostane data z Channel
-                script_lines.append(f"    data_ch = Channel.fromPath('data/*')")
-                script_lines.append(f"    {module_name.lower()} = {module_name.upper()}(data_ch)")
-                prev_output = module_name.lower()
+            process_name = module_name.upper().replace(" ", "_")
+            params = self.workflow_params.get(module_name, {})
+            input_files = params.get("input_files", "data/*")
+            if not prev_output:
+                # první proces dostane vstupní soubor
+                script_lines.append(f"    {process_name.lower()} = {process_name}(path='{input_files}')")
             else:
-                script_lines.append(f"    {module_name.lower()} = {module_name.upper()}({prev_output})")
-                prev_output = module_name.lower()
+                # další procesy berou výstup předchozího
+                script_lines.append(f"    {process_name.lower()} = {process_name}({prev_output})")
+            prev_output = process_name.lower()
         script_lines.append("}")
 
-        # Uložit soubor
+        # --- Uložit soubor ---
         output_dir = "workflows"
         os.makedirs(output_dir, exist_ok=True)
         nf_path = os.path.join(output_dir, "main.nf")
@@ -471,8 +479,6 @@ class MainWindow(QMainWindow):
             f.write("\n".join(script_lines))
 
         self.log(f"Pipeline script generated at {nf_path}")
-
-
 
     def log(self, message: str):
         """Vypíše zprávu do log panelu"""
