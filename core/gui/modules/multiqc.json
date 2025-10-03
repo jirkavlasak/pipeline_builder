@@ -1,10 +1,10 @@
 {
   "name": "MultiQC",
-  "description": "Aggregate results from bioinformatics analyses into a single report.",
+  "description": "Aggregate results from bioinformatics analyses.",
   "url": "https://multiqc.info/",
-  "input": ["results_dir/"],
+  "input": [],
   "output": ["multiqc_report.html"],
   "container": "quay.io/biocontainers/multiqc:1.13--pyhdfd78af_0",
   "parameters": {},
-  "command": "multiqc {input} -o {output_dir}"
+  "command": "multiqc {results} --outdir ${task.process}"
 }

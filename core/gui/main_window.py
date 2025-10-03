@@ -417,6 +417,19 @@ class MainWindow(QMainWindow):
             self.log("Workflow is empty.")
             return
 
+        # --- Kontrola, že všechny moduly mají input_files tam, kde je třeba ---
+        for module_name in modules:
+            module_params = self.workflow_params.get(module_name, {})
+            #if self.module_info[module_name].get("input") and not module_params.get("input_files"):
+            #    from PySide6.QtWidgets import QMessageBox
+            #    QMessageBox.warning(
+            #        self,
+            #        "Missing input files",
+            #        f"No input files selected for module '{module_name}'. Please select them in Pipeline Settings."
+            #    )
+            #    self.log(f"Pipeline generation aborted: input files missing for {module_name}")
+             #   return
+
         script_lines = [
             "#!/usr/bin/env nextflow",
             "",
@@ -424,31 +437,55 @@ class MainWindow(QMainWindow):
             ""
         ]
 
+        # --- Procesy ---
         for module_name in modules:
             data = self.module_info[module_name]
             params = self.workflow_params.get(module_name, {})
             container = data.get("container", "")
             command_template = data.get("command", "")
 
-            # nahrazení placeholderů {param} hodnotami z params
+            # Nahrazení parametrů
             command = command_template
             for pname, pval in params.items():
-                command = command.replace(f"{{{pname}}}", pval)
+                pname_clean = pname[2:] if pname.startswith("--") else pname
+                command = command.replace(f"{{{pname_clean}}}", pval)
 
-            # validní název procesu (bez mezer)
+            # Nahrazení vstupů placeholder
+            if data.get("input"):
+                command = command.replace("{input}", "${reads}")
+            else:
+                # moduly bez vstupu, pokud je placeholder {input}, nech ho prázdný
+                command = command.replace("{input}", "")
+
+            # Přidání --outdir pokud není v command
+            if "--outdir" not in command and container:
+                command += " --outdir ${task.process}"
+
+            # Název procesu
             process_name = module_name.upper().replace(" ", "_")
-
             script_lines.append(f"process {process_name} {{")
             if container:
                 script_lines.append(f"    container '{container}'")
+
+            # --- Input ---
             script_lines.append("    input:")
-            input_files = params.get("input_files")
-            if input_files:
-                script_lines.append(f"        path '{input_files}'")
+            if data.get("input"):
+                script_lines.append("        path reads")
+            else:
+                script_lines.append("        path dummy_input")  # kanál se nastaví workflow blokem
+
+            # --- Output ---
+            outputs = data.get("output", [])
             script_lines.append("    output:")
-            output_files = params.get("output_files")
-            if output_files:
-                script_lines.append(f"        path '{output_files}'")
+            if len(outputs) > 1:
+                script_lines.append("        path '*'")
+            elif outputs:
+                for outp in outputs:
+                    script_lines.append(f"        path '{outp}'")
+            else:
+                script_lines.append("        path 'output_*'")
+
+            # --- Script ---
             script_lines.append("    script:")
             script_lines.append("    \"\"\"")
             script_lines.append(f"    {command}")
@@ -457,18 +494,25 @@ class MainWindow(QMainWindow):
 
         # --- Workflow blok ---
         script_lines.append("workflow {")
-        prev_output = None
-        for module_name in modules:
+        prev_channel = None
+
+        for i, module_name in enumerate(modules):
             process_name = module_name.upper().replace(" ", "_")
-            params = self.workflow_params.get(module_name, {})
-            input_files = params.get("input_files", "data/*")
-            if not prev_output:
-                # první proces dostane vstupní soubor
-                script_lines.append(f"    {process_name.lower()} = {process_name}(path='{input_files}')")
+            module_params = self.workflow_params.get(module_name, {})
+
+            if module_params.get("input_files"):
+                # první modul s input_files → vytvoří channel
+                prev_channel = f"{process_name}_in"
+                script_lines.append(f"    {prev_channel} = Channel.fromPath('{module_params['input_files']}')")
+
+            # zavolat proces s předaným kanálem
+            if prev_channel:
+                script_lines.append(f"    {process_name}({prev_channel})")
+                prev_channel = f"{process_name}.out"
             else:
-                # další procesy berou výstup předchozího
-                script_lines.append(f"    {process_name.lower()} = {process_name}({prev_output})")
-            prev_output = process_name.lower()
+                # moduly bez input_files → zavoláme je bez argumentu
+                script_lines.append(f"    {process_name}()")
+
         script_lines.append("}")
 
         # --- Uložit soubor ---
@@ -479,6 +523,7 @@ class MainWindow(QMainWindow):
             f.write("\n".join(script_lines))
 
         self.log(f"Pipeline script generated at {nf_path}")
+
 
     def log(self, message: str):
         """Vypíše zprávu do log panelu"""
