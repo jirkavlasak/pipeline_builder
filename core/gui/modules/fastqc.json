@@ -1,15 +1,16 @@
 {
-  "name": "FastQC",
-  "description": "Quality control for high throughput sequence data.",
-  "url": "https://www.bioinformatics.babraham.ac.uk/projects/fastqc/",
-  "input": ["*.fastq.gz"],
-  "output": ["*_fastqc.html", "*_fastqc.zip"],
+  "name": "FASTQC",
+  "description": "A quality control tool for high throughput sequence data.",
   "container": "quay.io/biocontainers/fastqc:0.11.9--0",
-  "parameters": {
-    "--threads": {
-      "description": "Number of threads.",
-      "default": "2"
-    }
-  },
-  "command": "fastqc --threads {--threads} {input} --outdir ."
+  "input": [
+    { "id": "*.fastq.gz", "variable": "reads" }
+  ],
+  "output": [
+    { "path": "*_fastqc.zip", "emit": "zip" },
+    { "path": "*_fastqc.html", "emit": "html" }
+  ],
+  "params": [
+    { "id": "--threads", "type": "int", "default": 2 }
+  ],
+  "command": "fastqc --threads {--threads} {*.fastq.gz} --outdir ."
 }

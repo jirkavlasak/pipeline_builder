@@ -12,6 +12,7 @@ __pycache__/
 .venv/
 venv/
 
+
 # PySide6 / Qt build artifacts
 *.qmlc
 *.qrc
@@ -35,3 +36,5 @@ docker-compose.yml
 # OS / System
 .DS_Store
 Thumbs.db
+
+*.sh

@@ -83,66 +83,97 @@ class PipelineSettingsDialog(QDialog):
     def __init__(self, modules, module_info, workflow_params, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Pipeline Settings")
-        self.resize(600, 600)
-        self.layout = QVBoxLayout(self)
-        self.param_widgets = {}
+        self.setMinimumSize(600, 400)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        content = QWidget()
-        form_layout = QFormLayout(content)  # OPRAVA zde (původně QVBoxLayout)
+        self.widgets = {}
+        self.module_info = module_info
+        self.workflow_params = workflow_params
 
-        # --- General output dir (společný pro všechny moduly) ---
-        self.output_dir_edit = QLineEdit()
-        output_dir_btn = QPushButton("Browse")
-        output_dir_btn.clicked.connect(self.select_output_dir)
-        output_dir_layout = QHBoxLayout()
-        output_dir_layout.addWidget(self.output_dir_edit)
-        output_dir_layout.addWidget(output_dir_btn)
-        form_layout.addRow("General output directory:", output_dir_layout)
+        main_layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
 
+        # --- Vstupy a parametry pro každý modul ---
         for module_name in modules:
-            params = module_info[module_name].get("parameters", {})
-            inputs = module_info[module_name].get("input", [])
-            group = QGroupBox(module_name)
-            group_layout = QFormLayout(group)
-            widgets = {}
+            module_data = self.module_info.get(module_name, {})
+            
+            # Vstupy
+            inputs = module_data.get("input", [])
+            if inputs:
+                group_box = QGroupBox(f"Inputs for {module_name}")
+                group_layout = QFormLayout()
+                
+                for input_def in inputs:
+                    # Zpracování nového i starého formátu
+                    if isinstance(input_def, dict):
+                        input_id = input_def.get("id")
+                    else:
+                        input_id = input_def
 
-            # Dynamicky pro všechny vstupy
-            for input_name in inputs:
-                input_edit = QLineEdit()
-                input_btn = QPushButton("Browse")
-                input_btn.clicked.connect(lambda _, e=input_edit: self.select_file(e))
-                input_layout = QHBoxLayout()
-                input_layout.addWidget(input_edit)
-                input_layout.addWidget(input_btn)
-                group_layout.addRow(f"{input_name}:", input_layout)
-                widgets[input_name] = input_edit
+                    input_edit = QLineEdit()
+                    # Načtení uložené hodnoty, pokud existuje
+                    if module_name in self.workflow_params and input_id in self.workflow_params[module_name]:
+                        input_edit.setText(self.workflow_params[module_name][input_id])
 
-            # Parametry modulu
-            for pname, pinfo in params.items():
-                edit = QLineEdit(str(pinfo.get("default", "")))
-                group_layout.addRow(f"{pname}:", edit)
-                widgets[pname] = edit
+                    select_button = QPushButton("Select File")
+                    select_button.clicked.connect(lambda _, le=input_edit: self.select_file(le))
+                    
+                    row_layout = QHBoxLayout()
+                    row_layout.addWidget(input_edit)
+                    row_layout.addWidget(select_button)
+                    
+                    group_layout.addRow(f"{input_id}:", row_layout)
+                    self.widgets.setdefault(module_name, {})[input_id] = input_edit
 
-            # Předvyplnit předchozí hodnoty
-            if module_name in workflow_params:
-                for pname, edit in widgets.items():
-                    if pname in workflow_params[module_name]:
-                        edit.setText(workflow_params[module_name][pname])
+                group_box.setLayout(group_layout)
+                form_layout.addWidget(group_box)
 
-            group.setLayout(group_layout)
-            form_layout.addWidget(group)
-            self.param_widgets[module_name] = widgets
+            # Parametry
+            params = module_data.get("params", [])
+            if params:
+                group_box = QGroupBox(f"Parameters for {module_name}")
+                group_layout = QFormLayout()
 
-        content.setLayout(form_layout)
-        scroll.setWidget(content)
-        self.layout.addWidget(scroll)
+                for param in params:
+                    param_id = param.get("id")
+                    param_edit = QLineEdit()
+                    # Načtení uložené hodnoty nebo defaultní
+                    default_value = param.get("default", "")
+                    current_value = self.workflow_params.get(module_name, {}).get(param_id, default_value)
+                    param_edit.setText(str(current_value))
+                    
+                    group_layout.addRow(f"{param_id}:", param_edit)
+                    self.widgets.setdefault(module_name, {})[param_id] = param_edit
+                
+                group_box.setLayout(group_layout)
+                form_layout.addWidget(group_box)
 
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        self.layout.addWidget(self.button_box)
+
+        # --- Obecné nastavení ---
+        general_group = QGroupBox("General Settings")
+        general_layout = QFormLayout()
+        
+        self.output_dir_edit = QLineEdit()
+        if "_general_output_dir" in self.workflow_params:
+            self.output_dir_edit.setText(self.workflow_params["_general_output_dir"])
+        
+        select_out_button = QPushButton("Select Directory")
+        select_out_button.clicked.connect(self.select_output_dir)
+        
+        out_layout = QHBoxLayout()
+        out_layout.addWidget(self.output_dir_edit)
+        out_layout.addWidget(select_out_button)
+        general_layout.addRow("Global Output Directory:", out_layout)
+        
+        general_group.setLayout(general_layout)
+        form_layout.addWidget(general_group)
+
+        # --- Tlačítka OK/Cancel ---
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        main_layout.addLayout(form_layout)
+        main_layout.addWidget(button_box)
 
     def select_file(self, line_edit):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Input File")
@@ -156,7 +187,7 @@ class PipelineSettingsDialog(QDialog):
 
     def get_all_values(self):
         result = {}
-        for module_name, widgets in self.param_widgets.items():
+        for module_name, widgets in self.widgets.items():
             result[module_name] = {pname: edit.text() for pname, edit in widgets.items()}
         # Přidejte společný výstupní adresář
         result["_general_output_dir"] = self.output_dir_edit.text()
@@ -319,42 +350,48 @@ class MainWindow(QMainWindow):
 
         if not data:
             self.info_description.setPlainText("There are no informations about this module.")
-            self.info_table.clearContents()
-            self.info_table.setRowCount(0)
+            # Vyčištění parametrů
+            for i in reversed(range(self.param_layout.count())):
+                widget = self.param_layout.itemAt(i).widget()
+                if widget:
+                    widget.deleteLater()
             return
 
+        # Zpracování vstupů a výstupů pro zobrazení
+        input_list = data.get("input", [])
+        inputs = ", ".join([d.get("id") if isinstance(d, dict) else str(d) for d in input_list])
+
+        output_list = data.get("output", [])
+        outputs = ", ".join([d.get("path") if isinstance(d, dict) else str(d) for d in output_list])
+
         # Popis + URL + Input/Output
-        inputs = ", ".join(data.get("input", []))
-        outputs = ", ".join(data.get("output", []))
         desc = (
-            f"{data['name']}\n\n"
-            f"{data['description']}\n\n"
-            f"🔗 {data['url']}\n\n"
+            f"{data.get('name', 'N/A')}\n\n"
+            f"{data.get('description', '')}\n\n"
             f"Input: {inputs}\n"
             f"Output: {outputs}"
         )
         self.info_description.setPlainText(desc)
 
         # Parametry
+        # Vyčistit staré parametry
         for i in reversed(range(self.param_layout.count())):
             widget = self.param_layout.itemAt(i).widget()
             if widget:
                 widget.deleteLater()
 
-# Přidat nové parametry
-        params = data.get("parameters", {})
+        # Přidat nové parametry
+        params = data.get("params", []) # Očekáváme seznam slovníků
         if params:
-            for pname, pinfo in params.items():
-                # Popis
-                desc_label = QLabel(pinfo.get("description", ""))
-                desc_label.setWordWrap(True)
-                desc_label.setStyleSheet("font-style: italic; color: gray; margin-top:10px;")
-                self.param_layout.addWidget(desc_label)
+            for param_info in params:
+                param_id = param_info.get("id", "N/A")
+                param_type = param_info.get("type", "str")
+                param_default = param_info.get("default", "None")
 
                 # Detail parametru (název, typ, default)
-                detail_text = f"{pname} ({pinfo.get('type', 'str')}, default={pinfo.get('default', 'None')})"
+                detail_text = f"{param_id} (type: {param_type}, default: {param_default})"
                 detail_label = QLabel(detail_text)
-                detail_label.setStyleSheet("font-weight: bold;")
+                detail_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
                 self.param_layout.addWidget(detail_label)
 
                 # Oddělovací čára
@@ -417,19 +454,6 @@ class MainWindow(QMainWindow):
             self.log("Workflow is empty.")
             return
 
-        # --- Kontrola, že všechny moduly mají input_files tam, kde je třeba ---
-        for module_name in modules:
-            module_params = self.workflow_params.get(module_name, {})
-            #if self.module_info[module_name].get("input") and not module_params.get("input_files"):
-            #    from PySide6.QtWidgets import QMessageBox
-            #    QMessageBox.warning(
-            #        self,
-            #        "Missing input files",
-            #        f"No input files selected for module '{module_name}'. Please select them in Pipeline Settings."
-            #    )
-            #    self.log(f"Pipeline generation aborted: input files missing for {module_name}")
-             #   return
-
         script_lines = [
             "#!/usr/bin/env nextflow",
             "",
@@ -437,86 +461,119 @@ class MainWindow(QMainWindow):
             ""
         ]
 
+        # --- Parametry a kanály pro workflow blok ---
+        workflow_params_lines = []
+        input_channels = {}
+        general_output_dir = self.workflow_params.get("_general_output_dir", "")
+
+        for module_name in modules:
+            module_data = self.module_info[module_name]
+            params = self.workflow_params.get(module_name, {})
+            # Najdi první definovaný vstupní soubor a vytvoř pro něj kanál
+            for input_def in module_data.get("input", []):
+                input_key = input_def if isinstance(input_def, str) else input_def.get("id")
+                if input_key in params and params[input_key]:
+                    channel_name = f"{module_name.upper().replace(' ', '_')}_IN"
+                    workflow_params_lines.append(f"    {channel_name} = Channel.fromPath('{params[input_key]}')")
+                    input_channels[module_name] = channel_name
+                    break
+
+        if general_output_dir:
+             workflow_params_lines.append(f"    params.outdir = '{general_output_dir}'")
+
+
         # --- Procesy ---
         for module_name in modules:
             data = self.module_info[module_name]
             params = self.workflow_params.get(module_name, {})
             container = data.get("container", "")
             command_template = data.get("command", "")
-
-            # Nahrazení parametrů
-            command = command_template
-            for pname, pval in params.items():
-                pname_clean = pname[2:] if pname.startswith("--") else pname
-                command = command.replace(f"{{{pname_clean}}}", pval)
-
-            # Nahrazení vstupů placeholder
-            if data.get("input"):
-                command = command.replace("{input}", "${reads}")
-            else:
-                # moduly bez vstupu, pokud je placeholder {input}, nech ho prázdný
-                command = command.replace("{input}", "")
-
-            # Přidání --outdir pokud není v command
-            if "--outdir" not in command and container:
-                command += " --outdir ${task.process}"
-
-            # Název procesu
             process_name = module_name.upper().replace(" ", "_")
+
             script_lines.append(f"process {process_name} {{")
             if container:
                 script_lines.append(f"    container '{container}'")
 
             # --- Input ---
             script_lines.append("    input:")
-            if data.get("input"):
-                script_lines.append("        path reads")
-            else:
-                script_lines.append("        path dummy_input")  # kanál se nastaví workflow blokem
+            input_vars = {} # Mapování id vstupu na proměnnou (např. 'reads')
+            for input_def in data.get("input", []):
+                if isinstance(input_def, str): # Jednoduchý formát "input_id"
+                    input_id = input_def
+                    var_name = "input_files"
+                else: # Strukturovaný formát {"id": "...", "variable": "..."
+                    input_id = input_def.get("id")
+                    var_name = input_def.get("variable", "input_files")
+                
+                script_lines.append(f"    path {var_name}")
+                input_vars[input_id] = var_name
 
             # --- Output ---
-            outputs = data.get("output", [])
             script_lines.append("    output:")
-            if len(outputs) > 1:
-                script_lines.append("        path '*'")
-            elif outputs:
-                for outp in outputs:
-                    script_lines.append(f"        path '{outp}'")
-            else:
-                script_lines.append("        path 'output_*'")
+            for output_def in data.get("output", []):
+                if isinstance(output_def, dict):
+                    # Nový formát: {"path": "...", "emit": "..."
+                    path = output_def.get("path")
+                    emit_name = output_def.get("emit")
+                    script_lines.append(f"    path '{path}', emit: {emit_name}")
+                else:
+                    # Starý formát: "soubor.txt"
+                    # Vygenerujeme výstup bez 'emit'
+                    script_lines.append(f"    path '{output_def}'")
 
             # --- Script ---
             script_lines.append("    script:")
-            script_lines.append("    \"\"\"")
-            script_lines.append(f"    {command}")
-            script_lines.append("    \"\"\"")
+            command = command_template
+            # Nahrazení zástupných symbolů pro vstupy
+            for input_id, var_name in input_vars.items():
+                command = command.replace(f"{{{input_id}}}", f"${{{var_name}}}")
+            # Nahrazení parametrů
+            for pname, pval in params.items():
+                if f"{{{pname}}}" in command:
+                    command = command.replace(f"{{{pname}}}", str(pval))
+            
+            # Nahrazení obecných zástupných symbolů (např. pro multiqc)
+            command = command.replace("{*}", ".")
+            command = command.replace("{results}", ".")
+
+            script_lines.append('    """')
+            script_lines.append(f"    {command.strip()}")
+            script_lines.append('    """')
             script_lines.append("}\n")
 
         # --- Workflow blok ---
         script_lines.append("workflow {")
-        prev_channel = None
-
-        for i, module_name in enumerate(modules):
+        script_lines.extend(workflow_params_lines)
+        
+        process_outputs = {} # Udržuje výstupy z procesů
+        for module_name in modules:
             process_name = module_name.upper().replace(" ", "_")
-            module_params = self.workflow_params.get(module_name, {})
-
-            if module_params.get("input_files"):
-                # první modul s input_files → vytvoří channel
-                prev_channel = f"{process_name}_in"
-                script_lines.append(f"    {prev_channel} = Channel.fromPath('{module_params['input_files']}')")
-
-            # zavolat proces s předaným kanálem
-            if prev_channel:
-                script_lines.append(f"    {process_name}({prev_channel})")
-                prev_channel = f"{process_name}.out"
+            module_data = self.module_info[module_name]
+            
+            input_for_call = ""
+            # Zjistíme, zda má modul vlastní definovaný vstupní kanál
+            if module_name in input_channels:
+                input_for_call = input_channels[module_name]
             else:
-                # moduly bez input_files → zavoláme je bez argumentu
-                script_lines.append(f"    {process_name}()")
+                # Pokud ne, pokusí se najít vstup z předchozích procesů
+                input_source_def = module_data.get("workflow_input", {})
+                source_process = input_source_def.get("process")
+                source_emit = input_source_def.get("emit")
+                collect = input_source_def.get("collect", False)
+
+                if source_process and source_emit and source_process in process_outputs:
+                    input_for_call = f"{process_outputs[source_process]}.{source_emit}"
+                    if collect:
+                        input_for_call += ".collect()"
+
+            call = f"    {process_name}({input_for_call})"
+            script_lines.append(call)
+            process_outputs[module_name] = f"{process_name}.out"
 
         script_lines.append("}")
 
         # --- Uložit soubor ---
-        output_dir = "workflows"
+        output_dir = os.path.join("core", "gui", "workflows")
         os.makedirs(output_dir, exist_ok=True)
         nf_path = os.path.join(output_dir, "main.nf")
         with open(nf_path, "w", encoding="utf-8") as f:
